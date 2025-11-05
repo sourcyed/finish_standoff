@@ -18,8 +18,8 @@ class MainScreen extends StatelessWidget {
             Text('Finish Standoff', style: textStyle),
             Image(image: AssetImage('assets/revolvers.png')),
             ElevatedButton(
-              onPressed: () => {context.go('/duel')},
-              child: Text('Duel'),
+              onPressed: () => {context.go('/lobby')},
+              child: Text('Lobby'),
             ),
             ElevatedButton(
               onPressed: () => {context.go('/credits')},
