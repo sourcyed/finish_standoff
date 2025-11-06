@@ -16,6 +16,10 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
     on<MatchStartListening>(_onStartedListening);
     on<MatchUpdated>(_onMatchUpdated);
     on<MatchReadyPlayer>(_onMatchReadyPlayer);
+    on<MatchPlayerPrepared>(_onMatchPlayerPrepared);
+    on<MatchUpdatedError>((event, emit) async {
+      emit(MatchError(event.message));
+    });
   }
 
   void _onStartedListening(
@@ -32,19 +36,33 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
           (data) {
             try {
               final match = MatchModel.fromMap(event.matchId, data);
-              add(MatchUpdated(match));
+              add(MatchUpdated(match)); // safe
             } catch (e) {
-              emit(MatchError("Failed to parse match data"));
+              add(
+                MatchUpdatedError("Failed to parse match data"),
+              ); // custom event to handle errors safely
             }
           },
           onError: (error) {
-            emit(MatchError(error.toString()));
+            add(MatchUpdatedError(error.toString())); // same
           },
         );
   }
 
-  void _onMatchUpdated(MatchUpdated event, Emitter<MatchState> emit) {
+  Future<void> _onMatchUpdated(
+    MatchUpdated event,
+    Emitter<MatchState> emit,
+  ) async {
     emit(MatchLoaded(event.match));
+    final players = event.match.players.values;
+    final allReady =
+        players.length == 2 && players.every((data) => data['ready']);
+    if (event.match.state == 'waiting' && allReady) {
+      await api.setState(event.match.matchId, 'preparing');
+    }
+    if (event.match.state == 'preparing' && allReady) {
+      await api.setState(event.match.matchId, 'duel');
+    }
   }
 
   Future<void> _onMatchReadyPlayer(
@@ -53,7 +71,14 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
   ) async {
     emit(MatchLoading());
 
-    await api.readyPlayer(event.matchId, event.playerId);
+    await api.readyPlayer(event.matchId, event.playerId, true);
+  }
+
+  Future<void> _onMatchPlayerPrepared(
+    MatchPlayerPrepared event,
+    Emitter<MatchState> emit,
+  ) async {
+    await api.readyPlayer(event.matchId, event.playerId, event.prepared);
   }
 
   @override

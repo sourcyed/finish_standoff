@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:firebase_database/firebase_database.dart';
 import 'package:uuid/uuid.dart';
 
@@ -15,6 +17,7 @@ class MatchApi {
         ownerId: {"name": playerName, "ready": false},
       },
       "createdAt": ServerValue.timestamp,
+      "shootDelay": -1,
     });
 
     print("Created match $matchId");
@@ -46,18 +49,44 @@ class MatchApi {
     });
   }
 
-  Future<void> readyPlayer(String matchId, String playerId) {
-    return _db.child("matches/$matchId/players/$playerId/ready").set(true);
+  Future<void> readyPlayer(String matchId, String playerId, bool ready) {
+    return _db.child("matches/$matchId/players/$playerId/ready").set(ready);
   }
 
-  Future<void> removePlayer(String matchId, String playerId) {
-    return _db.child("matches/$matchId/players/$playerId").remove();
+  Future<void> removePlayer(String matchId, String playerId) async {
+    await _db.child("matches/$matchId/players/$playerId").remove();
+    setState(matchId, 'waiting');
   }
 
   Stream<Map<dynamic, dynamic>> listenToMatch(String matchId) {
     return _db.child("matches/$matchId").onValue.map((event) {
       return event.snapshot.value as Map<dynamic, dynamic>;
     });
+  }
+
+  Future<void> setState(String matchId, String state) async {
+    final playersSnapshot = await _db.child("matches/$matchId/players").get();
+
+    if (playersSnapshot.exists) {
+      final players = playersSnapshot.value as Map<dynamic, dynamic>;
+
+      // Create a map of updates to set all players as not ready
+      final Map<String, dynamic> updates = {};
+      for (final key in players.keys) {
+        updates["$key/ready"] = false;
+      }
+
+      // Apply the updates
+      await _db.child("matches/$matchId/players").update(updates);
+    }
+
+    // Finally, set the match state
+    await _db.child("matches/$matchId/state").set(state);
+
+    if (state == 'duel') {
+      final randomDelay = 3000 + Random().nextInt(7000);
+      await _db.child("matches/$matchId/shootDelay").set(randomDelay);
+    }
   }
 
   Future<String> findOrCreateMatch(String userId, String playerName) async {
@@ -96,6 +125,13 @@ class MatchApi {
           _db.child("matches/${child.key}").remove();
           continue;
         }
+
+        // Skip full lobbies
+        if ((data["players"] as Map).length > 1) {
+          print("${child.key} is full");
+          _db.child("matches/${child.key}").remove();
+        }
+
         print("Gonna join match");
         await joinMatch(child.key!, userId, playerName);
         return child.key!;

@@ -17,3 +17,20 @@ class MatchReadyPlayer extends MatchEvent {
   final String playerId;
   MatchReadyPlayer(this.matchId, this.playerId);
 }
+
+class MatchSensorTick extends MatchEvent {
+  final bool condition;
+  MatchSensorTick(this.condition);
+}
+
+class MatchPlayerPrepared extends MatchEvent {
+  final String matchId;
+  final String playerId;
+  final bool prepared;
+  MatchPlayerPrepared(this.matchId, this.playerId, this.prepared);
+}
+
+class MatchUpdatedError extends MatchEvent {
+  final String message;
+  MatchUpdatedError(this.message);
+}

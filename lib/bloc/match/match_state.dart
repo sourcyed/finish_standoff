@@ -15,3 +15,5 @@ class MatchError extends MatchState {
   final String message;
   MatchError(this.message);
 }
+
+class MatchReady extends MatchState {}
