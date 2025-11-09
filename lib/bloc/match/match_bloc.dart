@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:finish_standoff/data/match_api.dart';
-import 'package:finish_standoff/data/models/match_model.dart';
 import 'package:finish_standoff/data/player_id.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:finish_standoff/bloc/match/match_event.dart';
@@ -33,18 +32,11 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
     _matchSub = api
         .listenToMatch(event.matchId)
         .listen(
-          (data) {
-            try {
-              final match = MatchModel.fromMap(event.matchId, data);
-              add(MatchUpdated(match)); // safe
-            } catch (e) {
-              add(
-                MatchUpdatedError("Failed to parse match data"),
-              ); // custom event to handle errors safely
-            }
+          (match) {
+            add(MatchUpdated(match));
           },
           onError: (error) {
-            add(MatchUpdatedError(error.toString())); // same
+            add(MatchUpdatedError(error.toString()));
           },
         );
   }
@@ -54,9 +46,8 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
     Emitter<MatchState> emit,
   ) async {
     emit(MatchLoaded(event.match));
-    final players = event.match.players.values;
-    final allReady =
-        players.length == 2 && players.every((data) => data['ready']);
+    final players = event.match.players;
+    final allReady = players.length == 2 && players.every((p) => p.ready);
     if (event.match.state == 'waiting' && allReady) {
       await api.setState(event.match.matchId, 'preparing');
     }
@@ -87,6 +78,7 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
       final match = (state as MatchLoaded).match;
       final playerId = await PlayerIdService.getPlayerId();
       api.removePlayer(match.matchId, playerId);
+      print('Removing player...');
     }
     _matchSub?.cancel();
     return super.close();

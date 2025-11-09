@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:finish_standoff/data/models/match_model.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:uuid/uuid.dart';
 
@@ -44,9 +45,13 @@ class MatchApi {
     _db.child("matches/$matchId/players").onValue.listen((event) {
       final players = event.snapshot.value as Map?;
       if (players == null || players.isEmpty) {
-        _db.child("matches/$matchId").remove();
+        removeMatch(matchId);
       }
     });
+  }
+
+  Future<void> removeMatch(String matchId) {
+    return _db.child("matches/$matchId").remove();
   }
 
   Future<void> readyPlayer(String matchId, String playerId, bool ready) {
@@ -54,13 +59,31 @@ class MatchApi {
   }
 
   Future<void> removePlayer(String matchId, String playerId) async {
-    await _db.child("matches/$matchId/players/$playerId").remove();
-    setState(matchId, 'waiting');
+    final matchSnapshot = await _db.child("matches/$matchId").get();
+
+    if (matchSnapshot.exists) {
+      final match = MatchModel.fromMap(
+        matchId,
+        matchSnapshot.value as Map<dynamic, dynamic>,
+      );
+      if (match.ownerId == playerId) {
+        removeMatch(matchId);
+      } else {
+        await _db.child("matches/$matchId/players/$playerId").remove();
+        setState(matchId, 'waiting');
+      }
+    }
   }
 
-  Stream<Map<dynamic, dynamic>> listenToMatch(String matchId) {
+  Stream<MatchModel> listenToMatch(String matchId) {
     return _db.child("matches/$matchId").onValue.map((event) {
-      return event.snapshot.value as Map<dynamic, dynamic>;
+      final data = event.snapshot.value;
+
+      if (data is Map) {
+        return MatchModel.fromMap(matchId, data);
+      } else {
+        throw Exception("Match model is not correct: $data");
+      }
     });
   }
 
@@ -137,6 +160,8 @@ class MatchApi {
         return child.key!;
       }
     }
+
+    print("Gonna create match");
 
     return await createMatch(userId, playerName);
   }

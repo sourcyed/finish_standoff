@@ -1,9 +1,11 @@
+import 'package:finish_standoff/data/models/player_model.dart';
+
 class MatchModel {
   final String matchId;
   final String ownerId;
-  final String state; // waiting, countdown, active, finished
+  final String state;
   final int shootDelay;
-  final Map<String, dynamic> players;
+  final List<PlayerModel> players;
 
   MatchModel({
     required this.matchId,
@@ -14,12 +16,19 @@ class MatchModel {
   });
 
   factory MatchModel.fromMap(String id, Map<dynamic, dynamic> data) {
+    final playersRaw = data['players'] as Map<dynamic, dynamic>? ?? {};
+
+    final players =
+        playersRaw.entries
+            .map((entry) => PlayerModel.fromMap(entry.key, entry.value))
+            .toList();
+
     return MatchModel(
       matchId: id,
       ownerId: data['ownerId'],
       state: data['state'],
       shootDelay: data['shootDelay'],
-      players: Map<String, dynamic>.from(data['players'] ?? {}),
+      players: players,
     );
   }
 
@@ -28,7 +37,7 @@ class MatchModel {
       'ownerId': ownerId,
       'state': state,
       'shootDelay': shootDelay,
-      'players': players,
+      'players': {for (final p in players) p.id: p.toMap()},
     };
   }
 }

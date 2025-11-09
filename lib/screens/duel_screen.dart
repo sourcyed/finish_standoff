@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:finish_standoff/bloc/duel/duel_bloc.dart';
 import 'package:finish_standoff/bloc/duel/duel_event.dart';
 import 'package:finish_standoff/bloc/duel/duel_state.dart';
+import 'package:finish_standoff/data/models/player_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -35,10 +36,7 @@ class DuelScreen extends StatelessWidget {
           final match = state.match;
           switch (match.state) {
             case 'waiting':
-              return WaitingPhase(
-                entries: match.players.entries,
-                matchId: matchId,
-              );
+              return WaitingPhase(players: match.players, matchId: matchId);
             case 'preparing':
               return PreparationPhase(matchId: matchId, myId: myId);
             case 'duel':
@@ -72,10 +70,10 @@ class DuelScreen extends StatelessWidget {
 }
 
 class WaitingPhase extends StatefulWidget {
-  final Iterable<MapEntry<String, dynamic>> entries;
+  final List<PlayerModel> players;
   final String matchId;
 
-  const WaitingPhase({super.key, required this.entries, required this.matchId});
+  const WaitingPhase({super.key, required this.players, required this.matchId});
 
   @override
   State<WaitingPhase> createState() => _WaitingPhaseState();
@@ -128,7 +126,7 @@ class _WaitingPhaseState extends State<WaitingPhase>
   Widget build(BuildContext context) {
     if (_myId == null) return const Center(child: CircularProgressIndicator());
 
-    final entries = widget.entries;
+    final players = widget.players;
 
     return Scaffold(
       appBar: AppBar(title: const Text("Waiting for players")),
@@ -170,13 +168,12 @@ class _WaitingPhaseState extends State<WaitingPhase>
               Expanded(
                 child: ListView(
                   children:
-                      entries.map((entry) {
-                        final playerId = entry.key;
-                        final data = entry.value;
+                      players.map((player) {
+                        final playerId = player.id;
                         final isMe = playerId == _myId;
                         final displayName =
-                            isMe ? "${data["name"]} (You)" : data["name"];
-                        final ready = data["ready"] == true;
+                            isMe ? "${player.name} (You)" : player.name;
+                        final ready = player.ready == true;
                         return ListTile(
                           title: Text(
                             displayName,
@@ -197,9 +194,8 @@ class _WaitingPhaseState extends State<WaitingPhase>
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () {
-                  final myData =
-                      entries.firstWhere((e) => e.key == _myId!).value;
-                  if (!(myData["ready"] ?? false)) {
+                  final player = players.firstWhere((p) => p.id == _myId!);
+                  if (!(player.ready)) {
                     context.read<MatchBloc>().add(
                       MatchReadyPlayer(widget.matchId, _myId!),
                     );
@@ -356,6 +352,9 @@ class _PreparationPhaseState extends State<PreparationPhase> {
         if (state is PrepInterrupted &&
             _lastSentPreparedState != 'interrupted') {
           _lastSentPreparedState = 'interrupted';
+          context.read<MatchBloc>().add(
+            MatchPlayerPrepared(widget.matchId, widget.myId, false),
+          );
         }
       },
       child: Scaffold(
@@ -529,6 +528,7 @@ class _DuelPhaseState extends State<DuelPhase> {
   }
 
   void _onSensorEvent(AccelerometerEvent event) {
+    return;
     if (!_canShoot || _hasDrawn) return;
 
     // Detect upward z-axis movement (draw gun)
@@ -582,6 +582,14 @@ class _DuelPhaseState extends State<DuelPhase> {
                   value: _hasDrawn ? 1 : (_canShoot ? 0.5 : 0),
                   minHeight: 20,
                 ),
+                if (state is DuelCanShoot)
+                  ElevatedButton(
+                    onPressed: () {
+                      _hasDrawn = true;
+                      context.read<DuelBloc>().add(DuelShoot(widget.matchId));
+                    },
+                    child: Text('Shoot'),
+                  ),
                 const SizedBox(height: 16),
                 if (state is DuelShot)
                   const Text(
