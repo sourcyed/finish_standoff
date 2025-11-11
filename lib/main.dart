@@ -1,4 +1,3 @@
-import 'package:finish_standoff/bloc/duel/duel_bloc.dart';
 import 'package:finish_standoff/bloc/match/match_bloc.dart';
 import 'package:finish_standoff/bloc/match/match_event.dart';
 import 'package:finish_standoff/bloc/match_finder/match_finder_bloc.dart';
@@ -9,7 +8,7 @@ import 'package:finish_standoff/screens/credits_screen.dart';
 import 'package:finish_standoff/screens/duel_screen.dart';
 import 'package:finish_standoff/screens/lobby_screen.dart';
 import 'package:finish_standoff/screens/main_screen.dart';
-import 'package:finish_standoff/screens/result_creen.dart';
+import 'package:finish_standoff/screens/result_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -106,7 +105,6 @@ final GoRouter _router = GoRouter(
                                   ..add(MatchStartListening(matchId)),
                       ),
                       BlocProvider(create: (_) => PreparationBloc()),
-                      BlocProvider(create: (_) => DuelBloc(api: MatchApi())),
                     ],
                     child: DuelScreen(matchId: matchId, myId: myId),
                   );
@@ -131,10 +129,13 @@ final GoRouter _router = GoRouter(
         ),
         GoRoute(
           path: '/result',
-          pageBuilder: (BuildContext context, GoRouterState state) {
+          pageBuilder: (_, state) {
+            final win = state.uri.queryParameters['win'] == 'true';
+            final opponentName =
+                state.uri.queryParameters['opponentName'] ?? '';
             return CustomTransitionPage<void>(
               key: state.pageKey,
-              child: const ResultScreen(),
+              child: ResultScreen(win: win, opponentName: opponentName),
               transitionDuration: const Duration(milliseconds: 150),
               transitionsBuilder: (
                 BuildContext context,

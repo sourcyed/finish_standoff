@@ -22,7 +22,7 @@ class PreparationBloc extends Bloc<PreparationEvent, PreparationState> {
       } else {
         emit(PrepCounting(progress));
       }
-    } else {
+    } else if (state is! PrepInterrupted) {
       _start = null;
       emit(PrepInterrupted());
     }

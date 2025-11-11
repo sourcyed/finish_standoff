@@ -34,3 +34,9 @@ class MatchUpdatedError extends MatchEvent {
   final String message;
   MatchUpdatedError(this.message);
 }
+
+class MatchShoot extends MatchEvent {
+  final String matchId;
+  final String playerId;
+  MatchShoot(this.matchId, this.playerId);
+}

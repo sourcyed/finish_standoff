@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:finish_standoff/bloc/duel/duel_bloc.dart';
-import 'package:finish_standoff/bloc/duel/duel_event.dart';
-import 'package:finish_standoff/bloc/duel/duel_state.dart';
+import 'package:finish_standoff/data/models/match_model.dart';
 import 'package:finish_standoff/data/models/player_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:vibration/vibration.dart';
 import '../bloc/match/match_bloc.dart';
@@ -16,55 +15,87 @@ import '../bloc/preparation/preparation_event.dart';
 import '../bloc/preparation/preparation_state.dart';
 import '../data/player_id.dart';
 
-class DuelScreen extends StatelessWidget {
+class DuelScreen extends StatefulWidget {
   final String matchId;
   final String myId;
 
   const DuelScreen({super.key, required this.matchId, required this.myId});
 
   @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<MatchBloc, MatchState>(
-      builder: (context, state) {
-        if (state is MatchLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (state is MatchError) {
-          return Center(child: Text("Error: ${state.message}"));
-        }
-        if (state is MatchLoaded) {
-          final match = state.match;
-          switch (match.state) {
-            case 'waiting':
-              return WaitingPhase(players: match.players, matchId: matchId);
-            case 'preparing':
-              return PreparationPhase(matchId: matchId, myId: myId);
-            case 'duel':
-              return BlocBuilder<MatchBloc, MatchState>(
-                builder: (context, state) {
-                  if (state is MatchLoaded) {
-                    final match = state.match;
-                    final shootDelay = match.shootDelay; // in ms
+  State<DuelScreen> createState() => _DuelScreenState();
+}
 
-                    return BlocProvider(
-                      create:
-                          (_) =>
-                              DuelBloc(api: context.read<MatchBloc>().api)
-                                ..add(DuelStart(shootDelay)),
-                      child: DuelPhase(matchId: match.matchId),
-                    );
-                  }
-                  return const Center(child: CircularProgressIndicator());
-                },
-              );
-            // case 'result':
-            //   return const ResultPhasePlaceholder();
-            default:
-              return const Center(child: Text("Unknown phase"));
+class _DuelScreenState extends State<DuelScreen> {
+  bool hasVibratedSignal = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocListener<MatchBloc, MatchState>(
+      listener: (context, state) async {
+        if (state is MatchLoaded) {
+          if (state.match.state == 'result') {
+            final win = state.match.winnerId == widget.myId;
+            final match = state.match;
+            final myId = await PlayerIdService.getPlayerId();
+            if (!win && await Vibration.hasVibrator()) {
+              Vibration.vibrate(duration: 400);
+            }
+
+            final Map<String, String> params = {
+              'win': win.toString(),
+              'opponentName':
+                  match.players.firstWhere((p) => p.id != myId).name,
+            };
+
+            context.go(
+              Uri(path: '/result', queryParameters: params).toString(),
+            );
+          } else if (!hasVibratedSignal &&
+              state.match.canShoot == true &&
+              await Vibration.hasVibrator()) {
+            Vibration.vibrate(duration: 100); // signal that player can draw
+            hasVibratedSignal = true;
           }
         }
-        return const SizedBox();
       },
+      child: BlocBuilder<MatchBloc, MatchState>(
+        builder: (context, state) {
+          if (state is MatchLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state is MatchError) {
+            return Center(child: Text("Error: ${state.message}"));
+          }
+          if (state is MatchLoaded) {
+            final match = state.match;
+            switch (match.state) {
+              case 'waiting':
+                return WaitingPhase(
+                  players: match.players,
+                  matchId: widget.matchId,
+                );
+              case 'preparing':
+                return PreparationPhase(
+                  matchId: widget.matchId,
+                  myId: widget.myId,
+                );
+              case 'duel' || 'result':
+                return BlocBuilder<MatchBloc, MatchState>(
+                  builder: (context, state) {
+                    if (state is MatchLoaded) {
+                      final match = state.match;
+                      return DuelPhase(match: match);
+                    }
+                    return const Center(child: CircularProgressIndicator());
+                  },
+                );
+              default:
+                return const Center(child: Text("Unknown phase"));
+            }
+          }
+          return const SizedBox();
+        },
+      ),
     );
   }
 }
@@ -327,8 +358,7 @@ class _PreparationPhaseState extends State<PreparationPhase> {
   void initState() {
     super.initState();
     _sensorSub = accelerometerEventStream().listen((event) {
-      final holstered =
-          event.x.abs() < 1.5 && event.y < -9 && event.z.abs() < 1.5;
+      final holstered = event.x.abs() < 3 && event.y < -7 && event.z.abs() < 3;
       context.read<PreparationBloc>().add(PrepSensorTick(holstered));
     });
   }
@@ -507,9 +537,9 @@ class _SparklePainter extends CustomPainter {
 }
 
 class DuelPhase extends StatefulWidget {
-  final String matchId;
+  final MatchModel match;
 
-  const DuelPhase({super.key, required this.matchId});
+  const DuelPhase({super.key, required this.match});
 
   @override
   State<DuelPhase> createState() => _DuelPhaseState();
@@ -517,24 +547,32 @@ class DuelPhase extends StatefulWidget {
 
 class _DuelPhaseState extends State<DuelPhase> {
   StreamSubscription? _sensorSub;
-  bool _canShoot = false;
   bool _hasDrawn = false;
+  String? _myId;
 
   @override
   void initState() {
     super.initState();
+    _loadPlayerId();
 
     _sensorSub = accelerometerEventStream().listen(_onSensorEvent);
   }
 
+  Future<void> _loadPlayerId() async {
+    final id = await PlayerIdService.getPlayerId();
+    setState(() => _myId = id);
+  }
+
   void _onSensorEvent(AccelerometerEvent event) {
-    return;
-    if (!_canShoot || _hasDrawn) return;
+    if (_hasDrawn) return;
+
+    // print('x: ${event.x}, y: ${event.y}, z: ${event.z}');
 
     // Detect upward z-axis movement (draw gun)
-    if (event.z > 7.0 && event.x.abs() < 3.0 && event.y.abs() < 3.0) {
+    if (event.x.abs() > 7 && event.y.abs() < 3 && event.z.abs() < 3) {
+      print('Shoot');
       _hasDrawn = true;
-      context.read<DuelBloc>().add(DuelShoot(widget.matchId));
+      context.read<MatchBloc>().add(MatchShoot(widget.match.matchId, _myId!));
     }
   }
 
@@ -546,61 +584,34 @@ class _DuelPhaseState extends State<DuelPhase> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<DuelBloc, DuelState>(
-      listener: (context, state) async {
-        if (state is DuelCanShoot) {
-          _canShoot = true;
-          if (await Vibration.hasVibrator()) {
-            Vibration.vibrate(duration: 100); // signal that player can draw
-          }
-        }
-
-        if (state is DuelShot) {
-          // feedback for shooting
-          if (await Vibration.hasVibrator()) {
-            Vibration.vibrate(duration: 300);
-          }
-        }
-      },
-      builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(title: const Text("Duel")),
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  !_canShoot
-                      ? "Wait for the signal..."
-                      : _hasDrawn
-                      ? "You drew your gun!"
-                      : "Draw when ready!",
-                  style: const TextStyle(fontSize: 24),
-                ),
-                const SizedBox(height: 40),
-                LinearProgressIndicator(
-                  value: _hasDrawn ? 1 : (_canShoot ? 0.5 : 0),
-                  minHeight: 20,
-                ),
-                if (state is DuelCanShoot)
-                  ElevatedButton(
-                    onPressed: () {
-                      _hasDrawn = true;
-                      context.read<DuelBloc>().add(DuelShoot(widget.matchId));
-                    },
-                    child: Text('Shoot'),
-                  ),
-                const SizedBox(height: 16),
-                if (state is DuelShot)
-                  const Text(
-                    "Waiting for opponent...",
-                    style: TextStyle(fontSize: 18),
-                  ),
-              ],
+    return Scaffold(
+      appBar: AppBar(title: const Text("Duel")),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              !widget.match.canShoot
+                  ? "Wait for the signal..."
+                  : _hasDrawn
+                  ? "You fired!"
+                  : "Draw!",
+              style: const TextStyle(fontSize: 24),
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 40),
+            ElevatedButton(
+              onPressed: () {
+                if (_hasDrawn) return;
+                _hasDrawn = true;
+                context.read<MatchBloc>().add(
+                  MatchShoot(widget.match.matchId, _myId!),
+                );
+              },
+              child: Text('Shoot'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

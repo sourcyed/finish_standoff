@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:finish_standoff/data/match_api.dart';
 import 'package:finish_standoff/data/player_id.dart';
@@ -10,12 +11,14 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
   final MatchApi api;
 
   StreamSubscription? _matchSub;
+  bool _delayScheduled = false; // prevents scheduling GO! twice
 
   MatchBloc({required this.api}) : super(MatchInitial()) {
     on<MatchStartListening>(_onStartedListening);
     on<MatchUpdated>(_onMatchUpdated);
     on<MatchReadyPlayer>(_onMatchReadyPlayer);
     on<MatchPlayerPrepared>(_onMatchPlayerPrepared);
+    on<MatchShoot>(_onShoot);
     on<MatchUpdatedError>((event, emit) async {
       emit(MatchError(event.message));
     });
@@ -33,7 +36,9 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
         .listenToMatch(event.matchId)
         .listen(
           (match) {
-            add(MatchUpdated(match));
+            if (match != null) {
+              add(MatchUpdated(match));
+            }
           },
           onError: (error) {
             add(MatchUpdatedError(error.toString()));
@@ -45,14 +50,28 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
     MatchUpdated event,
     Emitter<MatchState> emit,
   ) async {
-    emit(MatchLoaded(event.match));
-    final players = event.match.players;
+    final match = event.match;
+    emit(MatchLoaded(match));
+    final players = match.players;
     final allReady = players.length == 2 && players.every((p) => p.ready);
-    if (event.match.state == 'waiting' && allReady) {
-      await api.setState(event.match.matchId, 'preparing');
+    if (match.state == 'waiting' && allReady) {
+      await api.setState(match.matchId, 'preparing');
     }
-    if (event.match.state == 'preparing' && allReady) {
-      await api.setState(event.match.matchId, 'duel');
+    if (match.state == 'preparing' && allReady) {
+      await api.setState(match.matchId, 'duel');
+    }
+    if (match.state == 'duel' && !_delayScheduled) {
+      final myId = await PlayerIdService.getPlayerId();
+
+      if (myId == match.ownerId) {
+        _delayScheduled = true;
+
+        final randomDelay = 3000 + Random().nextInt(7000);
+
+        Future.delayed(Duration(milliseconds: randomDelay), () async {
+          await api.goSignal(match.matchId);
+        });
+      }
     }
   }
 
@@ -70,6 +89,15 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
     Emitter<MatchState> emit,
   ) async {
     await api.readyPlayer(event.matchId, event.playerId, event.prepared);
+  }
+
+  Future<void> _onShoot(MatchShoot event, Emitter<MatchState> emit) async {
+    final match = state is MatchLoaded ? (state as MatchLoaded).match : null;
+    if (match == null) return;
+
+    final bool win = match.canShoot;
+
+    await api.finishDuel(event.matchId, event.playerId, win);
   }
 
   @override
