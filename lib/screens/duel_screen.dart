@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:finish_standoff/data/models/match_model.dart';
 import 'package:finish_standoff/data/models/player_model.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -223,11 +224,12 @@ class _PreparationPhaseState extends State<PreparationPhase> {
             children: [
               const Text('Place phone down (like you would into your pocket)'),
               const SizedBox(height: 20),
-              // ElevatedButton(
-              //   onPressed:
-              //       () => context.read<PreparationBloc>().add(PrepSkip()),
-              //   child: const Text('Instant Ready'),
-              // ),
+              if (kIsWeb)
+                ElevatedButton(
+                  onPressed:
+                      () => context.read<PreparationBloc>().add(PrepSkip()),
+                  child: const Text('Instant Ready'),
+                ),
               const SizedBox(height: 20),
               BlocBuilder<PreparationBloc, PreparationState>(
                 builder: (context, state) {
@@ -315,16 +317,17 @@ class _DuelPhaseState extends State<DuelPhase> {
                   : "Draw",
             ),
             const SizedBox(height: 20),
-            // ElevatedButton(
-            //   onPressed: () {
-            //     if (_hasDrawn) return;
-            //     _hasDrawn = true;
-            //     context.read<MatchBloc>().add(
-            //       MatchShoot(widget.match.matchId, _myId!),
-            //     );
-            //   },
-            //   child: const Text('Shoot'),
-            // ),
+            if (kIsWeb)
+              ElevatedButton(
+                onPressed: () {
+                  if (_hasDrawn) return;
+                  _hasDrawn = true;
+                  context.read<MatchBloc>().add(
+                    MatchShoot(widget.match.matchId, _myId!),
+                  );
+                },
+                child: const Text('Shoot'),
+              ),
           ],
         ),
       ),
