@@ -106,7 +106,6 @@ class MatchBloc extends Bloc<MatchEvent, MatchState> {
       final match = (state as MatchLoaded).match;
       final playerId = await PlayerIdService.getPlayerId();
       api.removePlayer(match.matchId, playerId);
-      print('Removing player...');
     }
     _matchSub?.cancel();
     return super.close();

@@ -45,10 +45,11 @@ class _DuelScreenState extends State<DuelScreen> {
               'opponentName':
                   match.players.firstWhere((p) => p.id != myId).name,
             };
-
-            context.go(
-              Uri(path: '/result', queryParameters: params).toString(),
-            );
+            if (context.mounted) {
+              context.go(
+                Uri(path: '/result', queryParameters: params).toString(),
+              );
+            }
           } else if (!hasVibratedSignal &&
               state.match.canShoot == true &&
               await Vibration.hasVibrator()) {
@@ -185,7 +186,9 @@ class _PreparationPhaseState extends State<PreparationPhase> {
     super.initState();
     _sensorSub = accelerometerEventStream().listen((event) {
       final holstered = event.x.abs() < 3 && event.y < -7 && event.z.abs() < 3;
-      context.read<PreparationBloc>().add(PrepSensorTick(holstered));
+      if (mounted) {
+        context.read<PreparationBloc>().add(PrepSensorTick(holstered));
+      }
     });
   }
 

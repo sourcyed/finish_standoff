@@ -8,7 +8,6 @@ class MatchApi {
 
   Future<String> createMatch(String ownerId, String playerName) async {
     String matchId = _uuid.v4().substring(0, 8);
-    print("Creating match...");
     await _db.child("matches/$matchId").set({
       "ownerId": ownerId,
       "winnerId": '',
@@ -20,8 +19,6 @@ class MatchApi {
       "canShoot": false,
     });
 
-    print("Created match $matchId");
-
     return matchId;
   }
 
@@ -30,15 +27,11 @@ class MatchApi {
     String playerId,
     String playerName,
   ) async {
-    print("Joining match $matchId");
     final playerRef = _db.child("matches/$matchId/players/$playerId");
 
     playerRef.onDisconnect().remove();
 
     await playerRef.set({"name": playerName, "ready": false});
-    print("Set player $playerId for match $matchId");
-
-    print("Joined match");
 
     // Remove match if the user leaves as the last player in the lobby
     _db.child("matches/$matchId/players").onValue.listen((event) {
@@ -121,16 +114,7 @@ class MatchApi {
             .equalTo("waiting")
             .get();
 
-    print("Found ${snapshot.children.length} lobbies:");
-    for (var child in snapshot.children) {
-      print(child.value);
-    }
-
-    print("Snapshot exists: ${snapshot.exists}");
-
     if (snapshot.exists) {
-      print('Children count: ${snapshot.children.length}');
-
       final matches = <MatchModel>[];
 
       for (final child in snapshot.children) {
@@ -149,7 +133,6 @@ class MatchApi {
       matches.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       for (final match in matches) {
-        print('Start for');
         final players = match.players;
         final createdAt = match.createdAt;
 
@@ -161,29 +144,23 @@ class MatchApi {
           continue;
         }
 
-        print('Check if need to delete');
         // Skip empty lobbies (corrupy)
         if (players.isEmpty) {
-          print('Is empty');
           await _db.child("matches/${match.matchId}").remove();
           continue;
         }
 
         // Skip full lobbies
         if (players.length > 1) {
-          print('Full');
           await _db.child("matches/${match.matchId}").remove();
           continue;
         }
 
         // I am the player
         if (players.length == 1 && players.first.id == playerId) {
-          print('Player already in lobby');
           await _db.child("matches/${match.matchId}").remove();
           continue;
         }
-
-        print('No need to delete');
 
         await joinMatch(match.matchId, playerId, playerName);
         return match.matchId;
