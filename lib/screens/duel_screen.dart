@@ -220,11 +220,11 @@ class _PreparationPhaseState extends State<PreparationPhase> {
             children: [
               const Text('Place phone down (like you would into your pocket)'),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed:
-                    () => context.read<PreparationBloc>().add(PrepSkip()),
-                child: const Text('Instant Ready'),
-              ),
+              // ElevatedButton(
+              //   onPressed:
+              //       () => context.read<PreparationBloc>().add(PrepSkip()),
+              //   child: const Text('Instant Ready'),
+              // ),
               const SizedBox(height: 20),
               BlocBuilder<PreparationBloc, PreparationState>(
                 builder: (context, state) {
@@ -312,16 +312,16 @@ class _DuelPhaseState extends State<DuelPhase> {
                   : "Draw",
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                if (_hasDrawn) return;
-                _hasDrawn = true;
-                context.read<MatchBloc>().add(
-                  MatchShoot(widget.match.matchId, _myId!),
-                );
-              },
-              child: const Text('Shoot'),
-            ),
+            // ElevatedButton(
+            //   onPressed: () {
+            //     if (_hasDrawn) return;
+            //     _hasDrawn = true;
+            //     context.read<MatchBloc>().add(
+            //       MatchShoot(widget.match.matchId, _myId!),
+            //     );
+            //   },
+            //   child: const Text('Shoot'),
+            // ),
           ],
         ),
       ),
